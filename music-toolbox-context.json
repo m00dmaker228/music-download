@@ -1,0 +1,86 @@
+{
+  "purpose": "Контекст для продовження роботи над проєктом Music Toolbox у новому чаті. Вставити як перше повідомлення разом із music-toolbox.zip.",
+  "date": "2026-10-25",
+  "language": "uk",
+  "project": {
+    "name": "Music Toolbox",
+    "summary": "Десктопний додаток (Python 3.12 + PySide6) для особистого використання: завантаження треків через yt-dlp (SoundCloud, YouTube, будь-що, що підтримує yt-dlp), робота з тегами (mutagen), обробка аудіо через ffmpeg. Заміна ручних скриптів soundcloud.py / soundcloud_single_track.py / strip_metadata.py. Ключова вимога UI: жодних автоматичних ланцюжків, кожна дія — окрема кнопка над файлами, вибраними в панелі «Файли».",
+    "stack": {
+      "lang": "Python 3.12",
+      "gui": "PySide6 (Qt 6)",
+      "external_binaries": "yt-dlp, ffmpeg, ffprobe — не вшиті, завантажуються з додатка в папку даних (Windows %LOCALAPPDATA%\\MusicToolbox\\bin, Linux ~/.local/share/MusicToolbox/bin); пошук: папка даних → bin/ поряд з exe → PATH",
+      "storage": "JSON (settings, profiles, presets) + SQLite (архів завантажених за (джерело,id), кеш ffprobe)",
+      "packaging": "PyInstaller one-folder без консолі; Windows — Inno Setup; Linux — AppImage + .deb",
+      "tooling": "uv + pyproject.toml, pytest, ruff; CI GitHub Actions windows-latest + ubuntu-latest"
+    },
+    "architecture": {
+      "app/core": "без Qt: paths, binaries (find/version/install/popen/stream_lines/kill_tree), downloader (list_playlist -J --flat-playlist, download_track з JSON-прогресом і скасуванням без .part), archive, library (ffprobe+теги, SQLite-кеш), tags (6 дій), process (10 ffmpeg-операцій, OutputPolicy), search (scsearch/ytsearch паралельно + iTunes Search API), profiles, presets, jsonstore, settings, models, logsetup",
+      "app/ui": "main_window (QSplitter: файловий браузер | QTabWidget 5 вкладок; трей-сповіщення), workers (Worker(QRunnable)+WorkerContext progress/log/is_cancelled), queue (QueueModel+ProgressDelegate+QueueController: пул з паралельністю 1–4, пауза, скасувати, повторити, оновлення ≤10/с), batch (BatchPanel для tags/process), file_browser, taskbar (Windows ITaskbarList3 через ctypes), state, logbus, tabs/{download,search,tags,process,settings,base}",
+      "contracts": [
+        "core/tags.py, core/process.py: fn(paths: list[Path], **params, progress=None) -> list[OpResult]; process додатково is_cancelled=None, policy=OutputPolicy",
+        "довгі операції в UI тільки через ui/workers.py",
+        "усі subprocess через binaries.popen()/run(): повна команда в лозі, utf-8, CREATE_NO_WINDOW на Windows, своя process group на Linux",
+        "yt-dlp: --newline --progress-template \"download:%(progress)j\" + postprocess, --print after_move:MTB_FILE=%(filepath)s, --windows-filenames, --ffmpeg-location",
+        "ffmpeg: -progress pipe:1 -nostats, відсоток = out_time_us / тривалість із ffprobe"
+      ]
+    },
+    "stages_status": {
+      "1_skeleton_window_binaries_workers": "done",
+      "2_downloader": "done",
+      "3_library_file_browser": "done",
+      "4_download_tab_profiles_queue": "done",
+      "5_tags": "done, тести на mp3/m4a/opus/flac/wav",
+      "6_process_presets": "done, тести на синтетичному wav",
+      "7_search": "done",
+      "8_release": "done (іконка, pyinstaller.spec, installer.iss, build_appimage.sh, build.yml); PyInstaller/AppImage/.deb перевірені на Linux; на чистій Windows не прогонялося",
+      "9_waveform_editor": "не робився (опційний)"
+    },
+    "verification": "137 pytest-тестів зелені, ruff чистий; GUI-тести offscreen клікають кнопки; реальне встановлення yt-dlp 2026.10.21 і ffmpeg BtbN з додатка перевірено на Linux; git-історія: один коміт на етап",
+    "known_limitations": [
+      "Пауза не зупиняє вже запущений yt-dlp (у нього нема паузи): поточні треки доходять до кінця, нові не стартують; скасування = kill + видалення .part",
+      "Taskbar-прогрес лише Windows, best effort через ctypes",
+      "exe не підписаний — SmartScreen попереджає",
+      "QtMultimedia-прев'ю на Linux потребує GStreamer-плагінів"
+    ],
+    "how_to_run": {
+      "windows_no_python": [
+        "powershell -ExecutionPolicy ByPass -c \"irm https://astral.sh/uv/install.ps1 | iex\"  (перезапустити PowerShell)",
+        "uv python install 3.12",
+        "uv sync --group dev",
+        "uv run music-toolbox",
+        "uv run pyinstaller build/pyinstaller.spec  → dist\\MusicToolbox\\MusicToolbox.exe (переносити всю папку)",
+        "iscc /DAppVersion=0.1.0 build\\installer.iss  → dist\\MusicToolbox-Setup-0.1.0.exe (потрібен Inno Setup 6)"
+      ],
+      "linux": [
+        "curl -LsSf https://astral.sh/uv/install.sh | sh",
+        "uv python install 3.12 && uv sync --group dev && uv run music-toolbox",
+        "uv run pyinstaller build/pyinstaller.spec && bash build/build_appimage.sh 0.1.0"
+      ],
+      "tests": "uv run pytest ; uv run ruff check"
+    },
+    "user_todo": [
+      "Прогнати повний цикл на чистій Windows: встановити → профіль → завантажити → обрізати → очистити → album; перевірити taskbar-прогрес",
+      "Покласти старі скрипти в legacy/ і завести 12 плейлистів через GUI або profiles.json",
+      "uv sync → закомітити uv.lock",
+      "Вирішити, чи потрібен етап 9 (waveform)"
+    ]
+  },
+  "conversation": [
+    {"role": "user", "summary": "Надіслав ТЗ Music Toolbox v1.0 (25.10.2026): призначення, стек, архітектура, вимоги до 5 вкладок, прогрес/черга, етапи 1–9 з критеріями, збірка, ризики."},
+    {"role": "assistant", "summary": "Зауваження до ТЗ: yt-dlp не вміє паузу (запропоновано пауза = не стартувати нові, скасування = kill + видалити .part); QtWinExtras нема в Qt 6 → taskbar через ITaskbarList3/ctypes; iTunes API ~20 запитів/хв → кешувати."},
+    {"role": "user", "summary": "Розпочинай роботу, в результаті дай zip, який можна використати."},
+    {"role": "assistant", "summary": "Зробив етап 1 і віддав music-toolbox-stage1.zip."},
+    {"role": "user", "summary": "Потрібен zip усього проєкту, а не частини."},
+    {"role": "assistant", "summary": "Реалізував етапи 2–8 (downloader, library, tags, process, search, download tab з чергою і профілями, реліз), 137 тестів, віддав music-toolbox.zip."},
+    {"role": "user", "summary": "Як сформувати exe?"},
+    {"role": "assistant", "summary": "uv sync --group dev; uv run pyinstaller build/pyinstaller.spec → dist/MusicToolbox/MusicToolbox.exe; інсталятор через iscc build/installer.iss; або тег v* у GitHub Actions."},
+    {"role": "user", "summary": "uv не знайдено; python не знайдено (Windows без Python)."},
+    {"role": "assistant", "summary": "Встановити uv через irm astral.sh/uv/install.ps1, потім uv python install 3.12, uv sync, uv run pyinstaller. Альтернатива — Python 3.12 з python.org з Add to PATH. Порада: не тримати проєкт у OneDrive."},
+    {"role": "user", "summary": "Чи можна exe запускати будь-де?"},
+    {"role": "assistant", "summary": "Так, але переносити всю папку dist/MusicToolbox (з _internal); Python на іншому ПК не потрібен; найзручніше — інсталятор Inno Setup; yt-dlp/ffmpeg встановлюються з Налаштувань при першому запуску."},
+    {"role": "user", "summary": "Чи описано в README як піднімати проєкт; якщо ні — створити і скинути лише README."},
+    {"role": "assistant", "summary": "Оновив README: швидкий старт на Windows без Python, Linux, де що лежить, збірка exe/інсталятора; скинув README.md (у zip стара версія — замінити)."},
+    {"role": "user", "summary": "На Linux усе працюватиме?"},
+    {"role": "assistant", "summary": "Так — усе перевірялося саме на Linux (тести, встановлення бінарників, PyInstaller, AppImage, .deb); відмінності: taskbar лише Windows, шляхи XDG, libfuse2 для AppImage, GStreamer для прев'ю."}
+  ]
+}
